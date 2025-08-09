@@ -244,3 +244,57 @@ function wireButtons() {
 }
 
 document.addEventListener("DOMContentLoaded", wireButtons);
+
+// Store unique wallet addresses
+const walletList = [];
+
+function addWalletAddress(addr) {
+  if (
+    addr &&
+    addr.trim() !== "" &&
+    /^0x[a-fA-F0-9]{40}$/.test(addr) &&
+    !walletList.includes(addr)
+  ) {
+    walletList.push(addr);
+    renderWalletList();
+  }
+}
+
+function renderWalletList() {
+  const container = document.getElementById("wallet-list");
+  container.innerHTML = "<h4>Wallet Addresses</h4>";
+
+  walletList.forEach(addr => {
+    const line = document.createElement("div");
+    line.className = "wallet-item";
+
+    const span = document.createElement("span");
+    span.textContent = addr;
+
+    const copyBtn = document.createElement("button");
+    copyBtn.textContent = "📋";
+    copyBtn.className = "copy-btn";
+    copyBtn.onclick = (e) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(addr);
+      if (isMobile()) alert("Copied to clipboard!");
+    };
+
+    // Mobile → tap line copies directly
+    line.onclick = () => {
+      if (isMobile()) {
+        navigator.clipboard.writeText(addr);
+        alert("Copied to clipboard!");
+      }
+    };
+
+    line.appendChild(span);
+    if (!isMobile()) line.appendChild(copyBtn);
+    container.appendChild(line);
+  });
+}
+
+function isMobile() {
+  return /Mobi|Android/i.test(navigator.userAgent);
+}
+
