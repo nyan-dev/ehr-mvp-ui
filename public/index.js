@@ -244,8 +244,7 @@ function wireButtons() {
 }
 
 document.addEventListener("DOMContentLoaded", wireButtons);
-
-// Store unique wallet addresses
+// ===== Wallet address capture & copy =====
 const walletList = [];
 
 function addWalletAddress(addr) {
@@ -262,8 +261,7 @@ function addWalletAddress(addr) {
 
 function renderWalletList() {
   const container = document.getElementById("wallet-list");
-  container.innerHTML = "<h4>Wallet Addresses</h4>";
-
+  container.innerHTML = ""; // clear old list
   walletList.forEach(addr => {
     const line = document.createElement("div");
     line.className = "wallet-item";
@@ -280,7 +278,6 @@ function renderWalletList() {
       if (isMobile()) alert("Copied to clipboard!");
     };
 
-    // Mobile → tap line copies directly
     line.onclick = () => {
       if (isMobile()) {
         navigator.clipboard.writeText(addr);
