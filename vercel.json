@@ -1,8 +1,0 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "public": "public",
-  "rewrites": [
-    { "source": "/:path*{.(js|css|png|jpg|jpeg|svg|ico|webp|map)}", "destination": "/:path*" },
-    { "source": "/:path*", "destination": "/index.html" }
-  ]
-}
