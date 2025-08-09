@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>EHR Consent MVP</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; }
+    h1 { margin-bottom: 8px; }
+    section { border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin: 16px 0; }
+    input { width: 100%; padding: 8px; margin: 8px 0; border: 1px solid #d1d5db; border-radius: 6px; }
+    button { padding: 8px 12px; margin: 6px 6px 6px 0; border: none; background: #111827; color: white; border-radius: 6px; cursor: pointer; }
+    button.secondary { background: #6b7280; }
+    pre { background: #0b1020; color: #e5e7eb; padding: 12px; border-radius: 8px; overflow: auto; max-height: 320px; }
+    .muted { color: #6b7280; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>EHR Consent Demo</h1>
+  <p class="muted">Connect your wallet, then manage consent and records via your smart contract.</p>
+
+  <section>
+    <button id="connect">Connect Wallet</button>
+    <button id="checkNet" class="secondary">Check Network</button>
+    <div id="account" class="muted"></div>
+  </section>
+
+  <section>
+    <h2>Patient actions</h2>
+    <input id="clinicianAddr" placeholder="Clinician address (0x...)" />
+    <button id="grant">Grant consent</button>
+    <button id="revoke" class="secondary">Revoke consent</button>
+  </section>
+
+  <section>
+    <h2>Clinician actions</h2>
+    <input id="patientAddr" placeholder="Patient address (0x...)" />
+    <input id="summary" placeholder="Record summary" />
+    <input id="hash" placeholder="Off-chain hash/URI (e.g., IPFS or URL)" />
+    <button id="create">Create record</button>
+    <button id="view" class="secondary">View records</button>
+  </section>
+
+  <section>
+    <h3>Output</h3>
+    <pre id="output"></pre>
+  </section>
+
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5/dist/ethers.min.js"></script>
+  <script src="index.js"></script>
+</body>
+</html>
