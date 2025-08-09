@@ -1,8 +1,5 @@
 {
-  "builds": [
-    { "src": "public/index.html", "use": "@vercel/static" }
-  ],
-  "routes": [
-    { "src": "/(.*)", "dest": "/public/index.html" }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "public": "public",
+  "cleanUrls": true
 }
