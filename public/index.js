@@ -1,3 +1,5 @@
+console.log("index.js loaded");
+
 // 1) Fill these in
 
 const CONTRACT_ADDRESS = "0x7248237faba080dCd35b8B56BCDBbeC73A704A15"; 
