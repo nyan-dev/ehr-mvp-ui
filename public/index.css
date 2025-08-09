@@ -1,0 +1,29 @@
+.wallet-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  margin-bottom: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.copy-btn {
+  background: transparent;
+  border: none;
+  font-size: 1rem;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+  cursor: pointer;
+}
+
+.wallet-item:hover .copy-btn {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .copy-btn {
+    display: none;
+  }
+}
