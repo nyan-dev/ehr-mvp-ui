@@ -41,3 +41,55 @@ Deployable **free** on [Vercel](https://vercel.com).
 ```bash
 git clone https://github.com/nyan-dev/ehr-mvp-ui.git
 cd ehr-mvp-ui
+```
+2. Install dependencies
+(If you add npm packages later)
+
+```bash
+npm install
+```
+
+3. Configure contract details
+Edit /public/index.js:
+
+```javascript
+const CONTRACT_ADDRESS = "0xYourDeployedAddress";
+const CONTRACT_ABI = [ /* Your Contract ABI JSON */ ];
+```
+
+4. Run locally
+You can simply open public/index.html in your browser, or serve locally for hot reload:
+
+```bash
+npm install -g serve
+serve public
+```
+
+5. Deploy to Vercel
+```bash
+vercel --prod
+```
+
+🧩 Tech Stack
+ethers.js
+
+HTML + Vanilla JS
+
+Vercel for hosting
+
+📚 Usage Flow
+Connect Wallet Authorizes MetaMask to interact with the contract
+
+Grant Consent Allows a clinician address to view records
+
+Create Record Saves hashed health record metadata on‑chain
+
+View Records Fetches list of records from blockchain for connected account
+
+📄 License
+MIT License — see LICENSE for details.
+
+🙌 Acknowledgements
+Ethereum community for testnets & tooling
+
+Open‑source contributors
