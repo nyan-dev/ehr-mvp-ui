@@ -1,7 +1,17 @@
-/* eslint-disable no-undef */
-console.log("index.js (ethers v6) loaded");
+/* EHR Consent MVP — public/index.js
+   - Uses ethers v6 (UMD). Ensure in index.html:
+     <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+     <script src="index.js"></script>
+   - Add this section below your Output in index.html:
+     <section>
+       <h3>Wallet Addresses</h3>
+       <div id="wallet-list"></div>
+     </section>
+*/
 
-// ====== Config ======
+//////////////////////
+// CONFIG
+//////////////////////
 const CONTRACT_ADDRESS = "0x7248237faba080dCd35b8B56BCDBbeC73A704A15";
 const ABI = [
   { "anonymous": false, "inputs": [ { "indexed": true, "internalType": "address", "name": "patient", "type": "address" }, { "indexed": true, "internalType": "address", "name": "clinician", "type": "address" } ], "name": "ConsentGranted", "type": "event" },
@@ -13,92 +23,208 @@ const ABI = [
   { "inputs": [ { "internalType": "address", "name": "_clinician", "type": "address" } ], "name": "revokeConsent", "outputs": [], "stateMutability": "nonpayable", "type": "function" }
 ];
 
-// ====== Globals ======
-let provider;   // ethers.BrowserProvider
-let signer;     // ethers.Signer
-let contract;   // ethers.Contract
-let ethProvider; // selected window.ethereum (prefers MetaMask)
+//////////////////////
+// GLOBALS
+//////////////////////
+let provider;     // ethers.BrowserProvider
+let signer;       // ethers.Signer
+let contract;     // ethers.Contract
+let ethProvider;  // chosen window.ethereum (MetaMask preferred)
+let currentAccount;
 
-// ====== UI helpers ======
-function log(msg, obj) {
-  const el = document.getElementById("output");
-  if (!el) return console.log(msg, obj ?? "");
-  if (obj !== undefined) {
-    el.textContent += `${msg} ${JSON.stringify(obj, null, 2)}\n`;
-  } else {
-    el.textContent += msg + "\n";
-  }
-  el.scrollTop = el.scrollHeight;
-}
+//////////////////////
+// DOM SHORTCUTS
+//////////////////////
+const $ = (id) => document.getElementById(id);
 
-function setAccount(text) {
-  const el = document.getElementById("account");
-  if (el) el.textContent = text || "";
-}
+const els = {
+  connect: $("connect"),
+  checkNet: $("checkNet"),
+  account: $("account"),
+  output: $("output"),
 
-function shorten(addr) {
-  return addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : "";
-}
+  clinicianAddr: $("clinicianAddr"),
+  patientAddr: $("patientAddr"),
+  summary: $("summary"),
+  hash: $("hash"),
 
-function serializeErr(err) {
-  return {
-    message: err?.message,
-    code: err?.code,
-    data: err?.data,
-    name: err?.name
-  };
-}
+  grant: $("grant"),
+  revoke: $("revoke"),
+  create: $("create"),
+  view: $("view"),
 
+  walletList: $("wallet-list"),
+};
+
+//////////////////////
+// UTIL
+//////////////////////
 function ensureEthersLoaded() {
   if (typeof ethers === "undefined") {
-    throw new Error("ethers is not defined — ensure the UMD build is loaded before this script.");
+    throw new Error("ethers is not defined — ensure the UMD build is loaded before index.js");
   }
 }
 
-// Prefer MetaMask if multiple injected providers exist
 function getEthereum() {
   const eth = window.ethereum;
   if (!eth) return null;
-  if (Array.isArray(eth.providers) && eth.providers.length > 0) {
+  if (Array.isArray(eth.providers) && eth.providers.length) {
     const metamask = eth.providers.find((p) => p.isMetaMask);
     return metamask || eth.providers[0];
   }
   return eth;
 }
 
-// ====== Core actions ======
+function short(addr) {
+  return addr ? addr.slice(0, 6) + "…" + addr.slice(-4) : "";
+}
+
+function jsonReplacer(_k, v) {
+  return typeof v === "bigint" ? v.toString() : v;
+}
+
+function formatErr(e) {
+  return e?.reason || e?.data?.message || e?.message || String(e);
+}
+
+//////////////////////
+// LOGGING
+//////////////////////
+function log(msg, data) {
+  const t = new Date().toISOString().split("T")[1].slice(0, 8);
+  const line = data ? `${msg} ${JSON.stringify(data, jsonReplacer, 2)}` : msg;
+  if (els.output) {
+    els.output.textContent += `${t} | ${line}\n`;
+    els.output.scrollTop = els.output.scrollHeight;
+  } else {
+    console.log(line);
+  }
+}
+
+function toast(msg) {
+  log(msg);
+}
+
+//////////////////////
+// WALLET ADDRESS LIST (with localStorage)
+//////////////////////
+const LS_KEY = "walletAddresses";
+
+function loadWallets() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || "[]"); }
+  catch { return []; }
+}
+
+function saveWallets(list) {
+  localStorage.setItem(LS_KEY, JSON.stringify(list));
+}
+
+function addWalletAddress(addr) {
+  if (!addr) return;
+  addr = addr.trim();
+  if (!ethers.isAddress(addr)) return;
+  const list = loadWallets();
+  if (!list.includes(addr)) {
+    list.unshift(addr);
+    saveWallets(list);
+    renderWalletList();
+  }
+}
+
+function removeWalletAddress(addr) {
+  const next = loadWallets().filter((a) => a !== addr);
+  saveWallets(next);
+  renderWalletList();
+}
+
+function renderWalletList() {
+  const wrap = els.walletList;
+  if (!wrap) return;
+  const list = loadWallets();
+
+  wrap.innerHTML = "";
+  if (list.length === 0) {
+    wrap.innerHTML = '<p class="muted">No addresses yet. They’ll appear here after you interact.</p>';
+    return;
+  }
+
+  list.forEach((addr) => {
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.alignItems = "center";
+    row.style.gap = "8px";
+    row.style.margin = "6px 0";
+
+    const addrBtn = document.createElement("button");
+    addrBtn.textContent = short(addr);
+    addrBtn.title = addr;
+    addrBtn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(addr);
+        toast(`Copied ${short(addr)}`);
+      } catch {
+        toast("Copy failed");
+      }
+    };
+
+    const fillClin = document.createElement("button");
+    fillClin.textContent = "→ Clinician";
+    fillClin.className = "secondary";
+    fillClin.onclick = () => {
+      if (els.clinicianAddr) els.clinicianAddr.value = addr;
+      toast("Filled clinician");
+    };
+
+    const fillPat = document.createElement("button");
+    fillPat.textContent = "→ Patient";
+    fillPat.className = "secondary";
+    fillPat.onclick = () => {
+      if (els.patientAddr) els.patientAddr.value = addr;
+      toast("Filled patient");
+    };
+
+    const removeBtn = document.createElement("button");
+    removeBtn.textContent = "✕";
+    removeBtn.className = "secondary";
+    removeBtn.onclick = () => removeWalletAddress(addr);
+
+    row.append(addrBtn, fillClin, fillPat, removeBtn);
+    wrap.appendChild(row);
+  });
+}
+
+//////////////////////
+// WALLET + CONTRACT
+//////////////////////
+function setAccount(addr) {
+  currentAccount = addr;
+  if (els.account) els.account.textContent = `Connected: ${short(addr)}`;
+  addWalletAddress(addr);
+}
+
 async function connectWallet() {
   try {
     ensureEthersLoaded();
-
     ethProvider = getEthereum();
-    if (!ethProvider) {
-      alert("No EVM wallet found. Please install/enable MetaMask and reload.");
-      return;
-    }
+    if (!ethProvider) throw new Error("No EVM wallet found. Install/enable MetaMask.");
 
     await ethProvider.request({ method: "eth_requestAccounts" });
-
-    provider = new ethers.BrowserProvider(ethProvider); // v6
+    provider = new ethers.BrowserProvider(ethProvider);
     signer = await provider.getSigner();
-
     const addr = await signer.getAddress();
-    setAccount(`Connected: ${shorten(addr)}`);
+    setAccount(addr);
 
     contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
 
-    // Optional: log network
     const net = await provider.getNetwork();
     log(`Connected. chainId=${net.chainId.toString()} name=${net.name || "unknown"}`);
   } catch (err) {
-    log("connectWallet error:", serializeErr(err));
+    log("connectWallet error:", formatErr(err));
   }
 }
 
 async function checkNetwork() {
   try {
-    ensureEthersLoaded();
-
     if (!provider) {
       const eth = getEthereum();
       if (!eth) throw new Error("No wallet provider");
@@ -106,8 +232,11 @@ async function checkNetwork() {
     }
     const net = await provider.getNetwork();
     log(`Network chainId: ${net.chainId.toString()} name: ${net.name || "unknown"}`);
+    if (Number(net.chainId) !== 11155111) {
+      log("Tip: switch to Sepolia (chainId 11155111) for testing");
+    }
   } catch (err) {
-    log("checkNetwork error:", serializeErr(err));
+    log("checkNetwork error:", formatErr(err));
   }
 }
 
@@ -116,182 +245,137 @@ function ensureContract() {
 }
 
 function validateAddress(addr, label) {
-  if (!ethers.isAddress(addr)) {
-    throw new Error(`${label} address is invalid: ${addr}`);
-  }
+  if (!ethers.isAddress(addr)) throw new Error(`${label} address is invalid: ${addr}`);
 }
 
+//////////////////////
+// CONTRACT ACTIONS
+//////////////////////
 async function grantConsent() {
   try {
     ensureContract();
-    const clinician = document.getElementById("clinicianAddr").value.trim();
+    const clinician = els.clinicianAddr?.value.trim();
     validateAddress(clinician, "Clinician");
+    addWalletAddress(clinician);
+
     const tx = await contract.grantConsent(clinician);
     log("grantConsent tx sent:", { hash: tx.hash });
     const rcpt = await tx.wait();
-    log(`Consent granted to ${clinician}`, { blockNumber: rcpt.blockNumber });
+    log(`Consent granted to ${clinician}`, { blockNumber: Number(rcpt.blockNumber) });
   } catch (err) {
-    log("grantConsent error:", serializeErr(err));
+    log("grantConsent error:", formatErr(err));
   }
 }
 
 async function revokeConsent() {
   try {
     ensureContract();
-    const clinician = document.getElementById("clinicianAddr").value.trim();
+    const clinician = els.clinicianAddr?.value.trim();
     validateAddress(clinician, "Clinician");
+    addWalletAddress(clinician);
+
     const tx = await contract.revokeConsent(clinician);
     log("revokeConsent tx sent:", { hash: tx.hash });
     const rcpt = await tx.wait();
-    log(`Consent revoked for ${clinician}`, { blockNumber: rcpt.blockNumber });
+    log(`Consent revoked for ${clinician}`, { blockNumber: Number(rcpt.blockNumber) });
   } catch (err) {
-    log("revokeConsent error:", serializeErr(err));
+    log("revokeConsent error:", formatErr(err));
   }
 }
 
 async function createRecord() {
   try {
     ensureContract();
-    const patient = document.getElementById("patientAddr").value.trim();
-    const summary = document.getElementById("summary").value.trim();
-    const hash = document.getElementById("hash").value.trim();
+    const patient = els.patientAddr?.value.trim();
+    const summary = els.summary?.value.trim();
+    const hash = els.hash?.value.trim();
 
     validateAddress(patient, "Patient");
     if (!summary) throw new Error("Summary is required");
     if (!hash) throw new Error("Hash/URI is required");
 
+    addWalletAddress(patient);
+
     const tx = await contract.createRecord(patient, summary, hash);
     log("createRecord tx sent:", { hash: tx.hash });
     const rcpt = await tx.wait();
-    log(`Record created for ${patient}`, { blockNumber: rcpt.blockNumber });
+    log(`Record created for ${patient}`, { blockNumber: Number(rcpt.blockNumber) });
   } catch (err) {
-    log("createRecord error:", serializeErr(err));
+    log("createRecord error:", formatErr(err));
   }
 }
 
 async function viewRecords() {
   try {
     ensureContract();
-    const patient = document.getElementById("patientAddr").value.trim();
+    const patient = els.patientAddr?.value.trim();
     validateAddress(patient, "Patient");
+    addWalletAddress(patient);
 
     const recs = await contract.getRecords(patient);
+    if (!Array.isArray(recs) || recs.length === 0) {
+      log(`No records for ${patient}`);
+      return;
+    }
+
     const pretty = recs.map((r, i) => ({
       index: i,
-      summary: r.summary,
-      hashPointer: r.hashPointer,
-      author: r.author,
-      timestamp: r.timestamp?.toString?.() ?? String(r.timestamp)
+      summary: r.summary ?? r[0],
+      hashPointer: r.hashPointer ?? r[1],
+      author: r.author ?? r[2],
+      timestamp: (r.timestamp ?? r[3])?.toString?.() ?? String(r.timestamp ?? r[3]),
     }));
     log("Records:", pretty);
   } catch (err) {
-    log("viewRecords error:", serializeErr(err));
+    log("viewRecords error:", formatErr(err));
   }
 }
 
-// ====== Wallet event listeners ======
+//////////////////////
+// WIRING + EVENTS
+//////////////////////
+function wireUI() {
+  els.connect?.addEventListener("click", connectWallet);
+  els.checkNet?.addEventListener("click", checkNetwork);
+  els.grant?.addEventListener("click", grantConsent);
+  els.revoke?.addEventListener("click", revokeConsent);
+  els.create?.addEventListener("click", createRecord);
+  els.view?.addEventListener("click", viewRecords);
+}
+
 function attachWalletEvents() {
-  const eth = ethProvider || window.ethereum;
+  const eth = getEthereum();
   if (!eth || !eth.on) return;
 
   eth.on("accountsChanged", async (accounts) => {
-    try {
-      const addr = accounts?.[0];
-      if (!addr) {
-        setAccount("Disconnected");
-        contract = undefined;
-        signer = undefined;
-        return;
-      }
-      setAccount(`Connected: ${shorten(addr)}`);
-      if (provider) {
-        signer = await provider.getSigner();
-        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-      }
-      log("accountsChanged -> updated signer");
-    } catch (err) {
-      log("accountsChanged handler error:", serializeErr(err));
+    if (!accounts || accounts.length === 0) {
+      currentAccount = undefined;
+      if (els.account) els.account.textContent = "";
+      signer = undefined;
+      contract = undefined;
+      return;
     }
+    const addr = accounts[0];
+    setAccount(addr);
+    if (provider) signer = await provider.getSigner();
+    if (signer) contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+    log("accountsChanged -> updated signer");
   });
 
-  eth.on("chainChanged", async (_hexId) => {
-    try {
-      // Some wallets recommend reload; we’ll re-init provider/signer.
-      provider = new ethers.BrowserProvider(getEthereum());
-      signer = await provider.getSigner();
-      contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-      const net = await provider.getNetwork();
-      log(`chainChanged -> chainId=${net.chainId.toString()}`);
-    } catch (err) {
-      log("chainChanged handler error:", serializeErr(err));
-    }
-  });
-}
-
-// ====== Wire UI ======
-function wireButtons() {
-  const byId = (id) => document.getElementById(id);
-
-  byId("connect")?.addEventListener("click", async () => {
-    await connectWallet();
-    attachWalletEvents();
-  });
-  byId("checkNet")?.addEventListener("click", checkNetwork);
-  byId("grant")?.addEventListener("click", grantConsent);
-  byId("revoke")?.addEventListener("click", revokeConsent);
-  byId("create")?.addEventListener("click", createRecord);
-  byId("view")?.addEventListener("click", viewRecords);
-}
-
-document.addEventListener("DOMContentLoaded", wireButtons);
-// ===== Wallet address capture & copy =====
-const walletList = [];
-
-function addWalletAddress(addr) {
-  if (
-    addr &&
-    addr.trim() !== "" &&
-    /^0x[a-fA-F0-9]{40}$/.test(addr) &&
-    !walletList.includes(addr)
-  ) {
-    walletList.push(addr);
-    renderWalletList();
-  }
-}
-
-function renderWalletList() {
-  const container = document.getElementById("wallet-list");
-  container.innerHTML = ""; // clear old list
-  walletList.forEach(addr => {
-    const line = document.createElement("div");
-    line.className = "wallet-item";
-
-    const span = document.createElement("span");
-    span.textContent = addr;
-
-    const copyBtn = document.createElement("button");
-    copyBtn.textContent = "📋";
-    copyBtn.className = "copy-btn";
-    copyBtn.onclick = (e) => {
-      e.stopPropagation();
-      navigator.clipboard.writeText(addr);
-      if (isMobile()) alert("Copied to clipboard!");
-    };
-
-    line.onclick = () => {
-      if (isMobile()) {
-        navigator.clipboard.writeText(addr);
-        alert("Copied to clipboard!");
-      }
-    };
-
-    line.appendChild(span);
-    if (!isMobile()) line.appendChild(copyBtn);
-    container.appendChild(line);
+  eth.on("chainChanged", async () => {
+    const eth2 = getEthereum();
+    if (!eth2) return;
+    provider = new ethers.BrowserProvider(eth2);
+    signer = await provider.getSigner();
+    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+    const net = await provider.getNetwork();
+    log(`chainChanged -> chainId=${net.chainId.toString()}`);
   });
 }
 
-function isMobile() {
-  return /Mobi|Android/i.test(navigator.userAgent);
-}
-
+document.addEventListener("DOMContentLoaded", () => {
+  wireUI();
+  renderWalletList();
+  attachWalletEvents();
+  log("Ready");
+});
